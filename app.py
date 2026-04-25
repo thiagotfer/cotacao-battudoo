@@ -8,8 +8,8 @@ st.title("🛒 Sistema de Cotação BATTUDOO")
 
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1UCAOUVlT8qbfB-MYRYah0r2jlSIpUNMnQYjPMg_k0ds/edit#gid=0"
 
-ABA_PRODUTOS = 0
-ABA_RESPOSTAS = 586586375 
+ABA_PRODUTOS = "Produtos"
+ABA_RESPOSTAS = "Respostas"
 
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
