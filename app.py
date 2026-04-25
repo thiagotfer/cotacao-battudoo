@@ -3,121 +3,120 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="BATTUDOO - Cotação", page_icon="🛒")
+# 1. CONFIGURAÇÃO DA PÁGINA
+st.set_page_config(page_title="BATTUDOO - Cotação", page_icon="🛒", layout="centered")
+
 st.title("🛒 Sistema de Cotação BATTUDOO")
+st.markdown("---")
 
+# URL e Configurações das Abas
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1UCAOUVlT8qbfB-MYRYah0r2jlSIpUNMnQYjPMg_k0ds/edit#gid=0"
-
 ABA_PRODUTOS = "Produtos"
 ABA_RESPOSTAS = "Respostas"
 
+# 2. CONEXÃO COM GOOGLE SHEETS (Usa os Secrets configurados)
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error("❌ Erro ao carregar o conector.")
-    st.write(e)
+    st.error("❌ Erro na conexão. Verifique os Secrets no Streamlit Cloud.")
     st.stop()
 
+# 3. FUNÇÃO PARA TRATAR VALORES MONETÁRIOS
 def formatar_moeda(texto):
-    if not texto:
-        return 0.0
+    if not texto: return 0.0
     numeros = "".join(filter(str.isdigit, texto))
     return float(numeros) / 100 if numeros else 0.0
 
+# 4. LEITURA DA LISTA DE PRODUTOS
 try:
-    df_produtos = conn.read(
-        spreadsheet=SPREADSHEET_URL,
-        worksheet=ABA_PRODUTOS,
-        ttl=0
-    )
-
+    df_produtos = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=ABA_PRODUTOS, ttl=0)
     if "Produto" in df_produtos.columns:
         itens_da_semana = df_produtos["Produto"].dropna().tolist()
-        st.success("✅ Conectado à Planilha BATTUDOO!")
     else:
-        st.error("A coluna A1 precisa se chamar Produto.")
+        st.error("A coluna A1 da aba 'Produtos' deve se chamar 'Produto'.")
         st.stop()
-
 except Exception as e:
-    st.error("❌ Não foi possível ler a aba Produtos.")
+    st.error(f"❌ Erro ao carregar produtos: {e}")
     st.stop()
 
-st.write("---")
+# 5. IDENTIFICAÇÃO DO FORNECEDOR
+st.subheader("📝 Identificação")
+lista_fornecedores = ["BATE FORTE", "COMPRE FÁCIL", "SPANI", "ARCON", "ESPERANÇA", "VILA NOVA", "GB", "Outros"]
+vendedor_selecionado = st.selectbox("Selecione sua Empresa / Fornecedor:", lista_fornecedores)
 
-# --- LÓGICA DE SELEÇÃO DE FORNECEDOR ---
-vendedor_selecionado = st.selectbox(
-    "Sua Empresa / Fornecedor:",
-    ["BATE FORTE", "COMPRE FÁCIL", "SPANI", "ARCON", "ESPERANÇA", "VILA NOVA", "GB", "Outros"]
-)
-
-# Se selecionar "Outros", mostramos os campos adicionais
 if vendedor_selecionado == "Outros":
-    st.info("Por favor, preencha os dados do novo fornecedor abaixo:")
-    col_empresa, col_vend, col_tel = st.columns(3)
-    with col_empresa:
-        empresa_nome = st.text_input("Nome da Empresa")
-    with col_vend:
-        vendedor_nome = st.text_input("Nome do Vendedor")
-    with col_tel:
-        telefone = st.text_input("Telefone / WhatsApp")
-    
-    # Criamos o nome final que será gravado na planilha
-    vendedor_final = f"OUTROS: {empresa_nome} | Vend: {vendedor_nome} | Tel: {telefone}"
+    col_e, col_v, col_t = st.columns(3)
+    with col_e: empresa = st.text_input("Nome da Empresa")
+    with col_v: nome_vend = st.text_input("Seu Nome")
+    with col_t: fone = st.text_input("WhatsApp")
+    vendedor_final = f"OUTROS: {empresa} ({nome_vend} - {fone})"
 else:
     vendedor_final = vendedor_selecionado
 
+st.markdown("---")
+
+# 6. FORMULÁRIO DINÂMICO (Lógica +Barato)
+st.subheader("💰 Tabela de Preços")
 respostas_vendedor = {}
 
-col1, col2 = st.columns(2)
-
-for i, item in enumerate(itens_da_semana):
-    with col1 if i % 2 == 0 else col2:
-        entrada = st.text_input(f"{item}:", key=f"in_{item}")
-        valor = formatar_moeda(entrada)
-        respostas_vendedor[item] = valor
-        st.caption(f"Valor: R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+for item in itens_da_semana:
+    # Verifica se o item deve pedir a marca
+    if "+barato" in item.lower():
+        with st.container():
+            st.warning(f"📌 Item Especial: {item}")
+            c1, c2 = st.columns(2)
+            with c1:
+                entrada = st.text_input(f"Preço de {item}", key=f"p_{item}")
+                valor = formatar_moeda(entrada)
+                respostas_vendedor[item] = valor
+                st.caption(f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            with c2:
+                marca = st.text_input(f"Qual marca você oferece?", key=f"m_{item}", placeholder="Ex: Omo, Ypê...")
+                respostas_vendedor[f"{item}_MARCA"] = marca
+            st.markdown("---")
+    else:
+        # Itens padrão
+        c1, c2 = st.columns([1.5, 1])
+        with c1:
+            entrada = st.text_input(f"{item}:", key=f"p_{item}")
+            valor = formatar_moeda(entrada)
+            respostas_vendedor[item] = valor
+        with c2:
+            # Espaço visual para alinhar ou informação extra se desejar
+            st.write("") 
+            st.caption(f"Confirmado: R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+        respostas_vendedor[f"{item}_MARCA"] = "" # Campo marca vazio na planilha
 
 st.write("---")
 
-if st.button("ENVIAR COTAÇÃO", use_container_width=True):
-    # Validação: se for "Outros", o nome da empresa é obrigatório
-    if vendedor_selecionado == "Outros" and not empresa_nome:
-        st.error("⚠️ Para fornecedores novos, o nome da empresa é obrigatório!")
-    
-    elif any(v > 0 for v in respostas_vendedor.values()):
+# 7. BOTÃO DE ENVIO
+if st.button("🚀 ENVIAR COTAÇÃO", use_container_width=True):
+    # Validações
+    if vendedor_selecionado == "Outros" and not empresa:
+        st.warning("⚠️ Identifique sua empresa para continuar.")
+    elif any(v > 0 for v in respostas_vendedor.values() if isinstance(v, (int, float))):
         with st.spinner("Gravando no Google Sheets..."):
             try:
+                # Lê histórico
                 try:
-                    df_hist = conn.read(
-                        spreadsheet=SPREADSHEET_URL,
-                        worksheet=ABA_RESPOSTAS,
-                        ttl=0
-                    )
+                    df_hist = conn.read(spreadsheet=SPREADSHEET_URL, worksheet=ABA_RESPOSTAS, ttl=0)
                 except:
                     df_hist = pd.DataFrame()
 
+                # Prepara linha
                 nova_linha = {
                     "Data": datetime.now().strftime("%d/%m/%Y %H:%M"),
-                    "Fornecedor": vendedor_final, # Grava o nome formatado ou o fixo
+                    "Fornecedor": vendedor_final,
                     **respostas_vendedor
                 }
 
-                df_final = pd.concat(
-                    [df_hist, pd.DataFrame([nova_linha])],
-                    ignore_index=True
-                )
+                # Salva
+                df_final = pd.concat([df_hist, pd.DataFrame([nova_linha])], ignore_index=True)
+                conn.update(worksheet=ABA_RESPOSTAS, data=df_final)
 
-                conn.update(
-                    spreadsheet=SPREADSHEET_URL,
-                    worksheet=ABA_RESPOSTAS,
-                    data=df_final
-                )
-
-                st.success(f"✅ Cotação de {vendedor_final} enviada!")
+                st.success(f"✅ Cotação de {vendedor_final} enviada com sucesso!")
                 st.balloons()
-
             except Exception as e:
-                st.error("❌ Erro ao salvar.")
-                st.write(e)
+                st.error(f"❌ Erro ao salvar: {e}")
     else:
-        st.warning("Preencha pelo menos um valor antes de enviar.")
+        st.warning("⚠️ Preencha pelo menos um valor.")
