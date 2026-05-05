@@ -83,14 +83,28 @@ with st.sidebar:
 # ---------------------------------------------------------
 # MODO 1: COTAÇÃO (VISÃO DO VENDEDOR)
 # ---------------------------------------------------------
+# ---------------------------------------------------------
+# MODO 1: COTAÇÃO (VISÃO DO VENDEDOR)
+# ---------------------------------------------------------
 if modo == "📝 Cotação":
     st.title("🛒 Portal de Cotação")
     
     st.markdown("### 👋 Bem-vindo ao portal BATTUDOO!")
+    
+    # CARD DE AVISO COM CONTRASTE CORRIGIDO
     st.markdown("""
-        <div style="background-color: #fff4e5; padding: 15px; border-radius: 10px; border-left: 5px solid #ffa500; margin: 10px 0;">
-            <strong style="color: #d35400;">📢 ATENÇÃO:</strong> 
-            Houve uma mudança no nosso Banco de Dados, então preciso que todos os vendedores se cadastrem novamente, Obrigado!
+        <div style="
+            background-color: #fff4e5; 
+            padding: 20px; 
+            border-radius: 10px; 
+            border-left: 5px solid #ffa500; 
+            margin: 10px 0;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+        ">
+            <strong style="color: #d35400; font-size: 1.2em;">📢 ATENÇÃO:</strong><br>
+            <span style="color: #2c3e50; font-weight: 500; font-size: 1.1em;">
+                Houve uma mudança no nosso Banco de Dados, então preciso que todos os vendedores se cadastrem novamente. Obrigado!
+            </span>
         </div>
     """, unsafe_allow_html=True)
     
