@@ -9,28 +9,26 @@ try:
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
 except ImportError:
-    st.error("Erro: Biblioteca 'reportlab' não encontrada no ambiente local.")
+    pass
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="BATTUDOO Elite v3.5", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="BATTUDOO Elite v3.7", page_icon="🛒", layout="wide")
 
-# CSS para melhor UI/UX e compactação de tabelas
+# CSS para UI/UX
 st.markdown("""
     <style>
     .stNumberInput, .stSelectbox, .stTextInput { margin-top: -5px; }
     hr { margin: 10px 0 !important; }
     .oferta-box { background-color: #fff3cd; color: #000; padding: 15px; border-radius: 10px; border-left: 5px solid #ffc107; margin-bottom: 10px; }
-    .hist-card { background-color: #f8f9fa; padding: 10px; border-radius: 5px; border-bottom: 2px solid #dee2e6; margin-bottom: 5px; color: #333; }
     div[data-testid="stTextArea"] label { display: block !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. CONEXÃO COM O BANCO DE DADOS
+# 2. CONEXÃO COM O BANCO
 try:
     conn = st.connection("postgresql", type="sql")
 except Exception as e:
-    st.error(f"Erro de conexão com o banco: {e}")
-    st.stop()
+    st.error(f"Erro de conexão: {e}"); st.stop()
 
 # --- FUNÇÕES AUXILIARES ---
 def formatar_moeda_input(texto):
@@ -44,228 +42,163 @@ def formatar_para_br(valor):
 def gerar_pdf_final(empresa, lista_pedido):
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
-    
-    # Cabeçalho do PDF
     p.setFont("Helvetica-Bold", 16)
-    p.drawString(70, height - 50, "BATTUDOO - ESPELHO DE PEDIDO")
+    p.drawString(70, 750, "BATTUDOO - ESPELHO DE PEDIDO")
     p.setFont("Helvetica", 12)
-    p.drawString(70, height - 75, f"Fornecedor: {empresa}")
-    p.drawString(70, height - 90, f"Data: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
-    p.line(70, height - 100, 540, height - 100)
-    
-    y = height - 130
+    p.drawString(70, 725, f"Fornecedor: {empresa}")
+    p.drawString(70, 710, f"Data: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
+    p.line(70, 700, 540, 700)
+    y = 670
     p.setFont("Helvetica", 11)
-    
     for linha in lista_pedido:
         p.drawString(70, y, linha)
         y -= 20
-        if y < 50:
-            p.showPage()
-            p.setFont("Helvetica", 11)
-            y = height - 50
-            
-    p.showPage()
-    p.save()
-    buffer.seek(0)
+        if y < 50: p.showPage(); y = 750
+    p.showPage(); p.save(); buffer.seek(0)
     return buffer
 
-# --- NAVEGAÇÃO LATERAL ---
+# --- NAVEGAÇÃO ---
 with st.sidebar:
     st.title("BATTUDOO Admin")
-    modo = st.radio("Menu de Navegação:", ["📝 Cotação", "📊 Painel Admin"], key="nav_main")
-    if st.session_state.get('autenticado'):
-        st.divider()
-        if st.button("🔒 Sair do Sistema"):
-            st.session_state.autenticado = False
-            st.rerun()
+    modo = st.radio("Menu:", ["📝 Cotação", "📊 Painel Admin"], key="nav_main")
+    if st.session_state.get('autenticado') and st.button("🔒 Sair"):
+        st.session_state.autenticado = False; st.rerun()
 
 # ---------------------------------------------------------
-# MODO 1: COTAÇÃO (VISÃO DO VENDEDOR)
-# ---------------------------------------------------------
-# ---------------------------------------------------------
-# MODO 1: COTAÇÃO (VISÃO DO VENDEDOR)
+# MODO 1: COTAÇÃO (VENDEDOR)
 # ---------------------------------------------------------
 if modo == "📝 Cotação":
     st.title("🛒 Portal de Cotação")
-    
-    st.markdown("### 👋 Bem-vindo ao portal BATTUDOO!")
-    
-    # CARD DE AVISO COM CONTRASTE CORRIGIDO
     st.markdown("""
-        <div style="
-            background-color: #fff4e5; 
-            padding: 20px; 
-            border-radius: 10px; 
-            border-left: 5px solid #ffa500; 
-            margin: 10px 0;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
-        ">
+        <div style="background-color: #fff4e5; padding: 20px; border-radius: 10px; border-left: 5px solid #ffa500; margin: 10px 0;">
             <strong style="color: #d35400; font-size: 1.2em;">📢 ATENÇÃO:</strong><br>
-            <span style="color: #2c3e50; font-weight: 500; font-size: 1.1em;">
-                Houve uma mudança no nosso Banco de Dados, então preciso que todos os vendedores se cadastrem novamente. Obrigado!
-            </span>
+            <span style="color: #2c3e50; font-weight: 500;">Houve uma mudança no Banco de Dados. Vendedores, por favor, recadastrem-se abaixo.</span>
         </div>
     """, unsafe_allow_html=True)
     
     df_v = conn.query("SELECT id, empresa, vendedor FROM fornecedores ORDER BY empresa", ttl=0)
-    lista_vendedores = [f"{row.empresa} ({row.vendedor})" for row in df_v.itertuples()]
-    vendedor_sel = st.selectbox("Identifique-se:", ["---"] + ["🆕 NOVO CADASTRO"] + lista_vendedores)
+    lista_v = [f"{r.empresa} ({r.vendedor})" for r in df_v.itertuples()]
+    v_sel = st.selectbox("Selecione sua empresa:", ["---", "🆕 NOVO CADASTRO"] + lista_v)
 
-    forn_id = None
-    if vendedor_sel == "🆕 NOVO CADASTRO":
-        with st.container():
-            c1, c2, c3 = st.columns(3)
-            e, v, z = c1.text_input("Nome da Empresa"), c2.text_input("Seu Nome"), c3.text_input("WhatsApp")
-            if st.button("Confirmar Cadastro"):
-                if e and v:
-                    with conn.session as s:
-                        res = s.execute(text("INSERT INTO fornecedores (empresa, vendedor, whatsapp) VALUES (:e, :v, :z) RETURNING id"), 
-                                        {"e": e.upper(), "v": v, "z": z})
-                        forn_id = res.fetchone()[0]; s.commit()
-                    st.success("Cadastro realizado!"); st.rerun()
-    elif vendedor_sel != "---":
-        idx = lista_vendedores.index(vendedor_sel)
-        forn_id = int(df_v.iloc[idx]['id'])
+    f_id = None
+    if v_sel == "🆕 NOVO CADASTRO":
+        c1, c2, c3 = st.columns(3)
+        e, v, z = c1.text_input("Empresa"), c2.text_input("Nome"), c3.text_input("WhatsApp")
+        if st.button("Cadastrar"):
+            with conn.session as s:
+                res = s.execute(text("INSERT INTO fornecedores (empresa, vendedor, whatsapp) VALUES (:e, :v, :z) RETURNING id"), {"e": e.upper(), "v": v, "z": z})
+                f_id = res.fetchone()[0]; s.commit(); st.rerun()
+    elif v_sel != "---":
+        f_id = int(df_v.iloc[lista_v.index(v_sel)]['id'])
 
-    if forn_id:
+    if f_id:
         df_p = conn.query("SELECT id, nome FROM produtos WHERE em_cotacao = TRUE ORDER BY nome", ttl=0)
         if not df_p.empty:
-            with st.form("form_vendedor"):
-                st.subheader("📋 Lista de Preços")
-                respostas = {}
-                for row in df_p.itertuples():
-                    tem_b = "+b" in row.nome.lower()
+            with st.form("form_cot"):
+                res = {}
+                for r in df_p.itertuples():
                     c1, c2, c3 = st.columns([3, 1, 2])
-                    p_in = c1.text_input(f"{row.nome}", key=f"v_p_{row.id}")
-                    respostas[row.id] = formatar_moeda_input(p_in)
-                    c2.write(f"**{formatar_para_br(respostas[row.id])}**")
-                    respostas[f"m_{row.id}"] = c3.text_input("Marca", key=f"v_m_{row.id}") if tem_b else ""
-                
-                if st.form_submit_button("🚀 ENVIAR MINHA COTAÇÃO"):
+                    p_in = c1.text_input(r.nome, key=f"p_{r.id}")
+                    res[r.id] = formatar_moeda_input(p_in)
+                    c2.write(f"**{formatar_para_br(res[r.id])}**")
+                    res[f"m_{r.id}"] = col3.text_input("Marca", key=f"m_{r.id}") if "+b" in r.nome.lower() else ""
+                if st.form_submit_button("🚀 ENVIAR COTAÇÃO"):
                     with conn.session as s:
-                        for p_id, preco in respostas.items():
-                            if isinstance(p_id, int) and preco > 0:
-                                s.execute(text("INSERT INTO cotacoes (produto_id, fornecedor_id, preco, marca) VALUES (:p, :f, :pr, :m)"),
-                                          {"p": p_id, "f": forn_id, "pr": preco, "m": respostas.get(f"m_{p_id}", "")})
-                        s.commit()
-                    st.success("Cotação enviada!"); st.balloons()
-        
-        st.divider()
-        st.subheader("🔥 Ofertas Extras")
-        if 'num_o' not in st.session_state: st.session_state.num_o = 1
-        extras = []
-        for i in range(st.session_state.num_o):
-            cx1, cx2, cx3 = st.columns([3, 1, 1])
-            n_ex = cx1.text_input(f"Produto {i+1}", key=f"ex_n_{i}")
-            p_ex = cx2.text_input(f"Preço {i+1}", key=f"ex_p_{i}")
-            v_ex = formatar_moeda_input(p_ex)
-            cx3.write(f"\n\n**{formatar_para_br(v_ex)}**")
-            if i == st.session_state.num_o - 1 and n_ex != "":
-                st.session_state.num_o += 1; st.rerun()
-            if n_ex and v_ex > 0: extras.append({"n": n_ex, "p": v_ex})
-        
-        if st.button("📢 ENVIAR EXTRAS"):
-            with conn.session as s:
-                for item in extras:
-                    s.execute(text("INSERT INTO ofertas_extras (fornecedor_id, produto, preco) VALUES (:f, :n, :p)"), {"f": forn_id, "n": item['n'], "p": item['p']})
-                s.commit()
-            st.session_state.num_o = 1; st.success("Extras enviados!"); st.rerun()
+                        for pid, pr in res.items():
+                            if isinstance(pid, int) and pr > 0:
+                                s.execute(text("INSERT INTO cotacoes (produto_id, fornecedor_id, preco, marca) VALUES (:p, :f, :pr, :m)"), {"p": pid, "f": f_id, "pr": pr, "m": res.get(f"m_{pid}", "")})
+                        s.commit(); st.success("Enviado com sucesso!"); st.balloons()
 
 # ---------------------------------------------------------
-# MODO 2: PAINEL ADMINISTRATIVO
+# MODO 2: ADMIN
 # ---------------------------------------------------------
 else:
     if not st.session_state.get('autenticado'):
-        with st.form("login"):
-            pw = st.text_input("Chave de Acesso Admin", type="password")
-            if st.form_submit_button("Entrar"):
-                if pw == "battudoo2026": st.session_state.autenticado = True; st.rerun()
-                else: st.error("Senha inválida")
+        pw = st.text_input("Senha Admin", type="password")
+        if st.button("Acessar"):
+            if pw == "battudoo2026": st.session_state.autenticado = True; st.rerun()
     else:
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🏆 Ranking", "🔥 Extras", "📈 Histórico", "📦 Gestão", "👀 Monitoramento"])
-
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🏆 Ranking", "🔍 Consultar Item", "🔥 Extras", "📈 Histórico", "📦 Gestão", "👀 Monitoramento"])
+        
         with tab1:
-            st.subheader("🏆 Melhores Preços da Semana")
-            q_rank = """SELECT DISTINCT ON (c.produto_id) p.nome, c.preco, f.empresa, f.vendedor, c.marca, f.id as forn_id
-                        FROM cotacoes c JOIN produtos p ON c.produto_id = p.id JOIN fornecedores f ON c.fornecedor_id = f.id
-                        WHERE p.em_cotacao = TRUE ORDER BY c.produto_id, c.preco ASC;"""
-            df_r = conn.query(q_rank, ttl=0)
-            
+            st.subheader("🏆 Ganhadores da Semana")
+            df_r = conn.query("""SELECT DISTINCT ON (c.produto_id) p.nome, c.preco, f.empresa, f.vendedor, c.marca, f.id as forn_id 
+                                 FROM cotacoes c JOIN produtos p ON c.produto_id = p.id JOIN fornecedores f ON c.fornecedor_id = f.id 
+                                 WHERE p.em_cotacao = TRUE ORDER BY c.produto_id, c.preco ASC""", ttl=0)
             if not df_r.empty:
-                if st.button("💾 SALVAR NO HISTÓRICO"):
-                    with conn.session as s:
-                        for _, r in df_r.iterrows():
-                            s.execute(text("INSERT INTO historico_precos (produto_nome, preco_pago, fornecedor_nome) VALUES (:p, :pr, :f)"), {"p": r['nome'], "pr": r['preco'], "f": r['empresa']})
-                        s.commit(); st.success("Histórico atualizado!")
-
                 for forn in df_r["empresa"].unique():
                     id_f = int(df_r[df_r["empresa"] == forn]["forn_id"].iloc[0])
                     df_f = df_r[df_r["empresa"] == forn]
-                    df_ex = conn.query(f"SELECT produto, preco FROM ofertas_extras WHERE fornecedor_id = {id_f}", ttl=0)
-                    
                     with st.expander(f"📦 FORNECEDOR: {forn}", expanded=True):
-                        linhas_pedido = []
-                        st.markdown("**Itens Ganhos:**")
+                        linhas = []
                         for _, r in df_f.iterrows():
                             c1, c2, c3, c4, c5 = st.columns([2, 1, 0.7, 0.8, 1.5])
                             p_txt = f"{r['nome']} ({r['marca']})" if r['marca'] else r['nome']
                             c1.write(f"**{p_txt}**"); c2.write(formatar_para_br(r['preco']))
                             qtd = c3.number_input("Qtd", min_value=0, step=1, key=f"q_{id_f}_{r['nome']}", label_visibility="collapsed")
                             und = c4.selectbox("Un", ["UN", "CX", "DP", "PCT", "FD"], key=f"u_{id_f}_{r['nome']}", label_visibility="collapsed")
-                            obs = c5.text_input("Obs", key=f"o_{id_f}_{r['nome']}", placeholder="Sabor/Obs", label_visibility="collapsed")
+                            obs = c5.text_input("Obs", key=f"o_{id_f}_{r['nome']}", label_visibility="collapsed")
                             if qtd > 0:
-                                linhas_pedido.append(f"• {qtd} {und} - {p_txt} {f'({obs})' if obs else ''} - {formatar_para_br(r['preco'])}")
-
-                        if not df_ex.empty:
-                            st.markdown("---")
-                            for ex in df_ex.itertuples():
-                                c1, c2, c3, c4, c5 = st.columns([2, 1, 0.7, 0.8, 1.5])
-                                c1.write(f"*{ex.produto}*"); c2.write(formatar_para_br(ex.preco))
-                                qe = c3.number_input("Qtd", min_value=0, step=1, key=f"qe_{id_f}_{ex.produto}", label_visibility="collapsed")
-                                ue = c4.selectbox("Un", ["UN", "CX", "FD", "PCT"], key=f"ue_{id_f}_{ex.produto}", label_visibility="collapsed")
-                                oe = c5.text_input("Obs", key=f"oe_{id_f}_{ex.produto}", placeholder="Sabor", label_visibility="collapsed")
-                                if qe > 0:
-                                    linhas_pedido.append(f"• {qe} {ue} - {ex.produto} {f'({oe})' if oe else ''} - {formatar_para_br(ex.preco)} (EXTRA)")
-
-                        st.divider()
-                        col_pdf, col_zap = st.columns([1, 1])
-                        zap_full = f"*PEDIDO BATTUDOO - {forn}*\n\n" + "\n".join(linhas_pedido)
+                                texto_item = f"• {qtd} {und} - {p_txt} {f'({obs})' if obs else ''} - {formatar_para_br(r['preco'])}"
+                                linhas.append(texto_item)
                         
+                        st.divider()
+                        col_pdf, col_zap = st.columns(2)
+                        zap_msg = f"*PEDIDO BATTUDOO - {forn}*\n\n" + "\n".join(linhas)
                         with col_pdf:
-                            if linhas_pedido:
-                                st.download_button("📄 Gerar PDF", data=gerar_pdf_final(forn, linhas_pedido), file_name=f"pedido_{forn}.pdf", mime="application/pdf", key=f"pdf_{id_f}")
-                        with col_zap:
-                            st.markdown(f"[📲 Enviar WhatsApp](https://wa.me/?text={urllib.parse.quote(zap_full)})")
-                        st.code(zap_full)
+                            if linhas: st.download_button("📄 Gerar PDF", data=gerar_pdf_final(forn, linhas), file_name=f"pedido_{forn}.pdf", key=f"pdf_{id_f}")
+                        with col_zap: st.markdown(f"[📲 Zap](https://wa.me/?text={urllib.parse.quote(zap_msg)})")
+                        st.code(zap_msg)
+
+        with tab2:
+            st.subheader("🔍 Consultar Opções por Item")
+            df_p_cota = conn.query("SELECT DISTINCT p.id, p.nome FROM produtos p JOIN cotacoes c ON p.id = c.produto_id WHERE p.em_cotacao = TRUE ORDER BY p.nome", ttl=0)
+            if not df_p_cota.empty:
+                item_busca = st.selectbox("Selecione o produto:", ["---"] + [r.nome for r in df_p_cota.itertuples()])
+                if item_busca != "---":
+                    q_todos = """SELECT f.empresa, f.vendedor, c.preco, c.marca, f.whatsapp FROM cotacoes c 
+                                 JOIN fornecedores f ON c.fornecedor_id = f.id JOIN produtos p ON c.produto_id = p.id
+                                 WHERE p.nome = :nome AND p.em_cotacao = TRUE ORDER BY c.preco ASC"""
+                    res_c = conn.query(q_todos, params={"nome": item_busca}, ttl=0)
+                    for i, res in enumerate(res_c.itertuples()):
+                        cor = "green" if i == 0 else "#2c3e50"
+                        st.markdown(f"""<div style="border: 1px solid #ddd; padding: 15px; border-radius: 10px; margin-bottom: 10px; border-left: 10px solid {cor};">
+                            <strong style="font-size: 1.1em;">{res.empresa}</strong> | Preço: <b style="color: #d35400;">{formatar_para_br(res.preco)}</b><br>
+                            <small>Vendedor: {res.vendedor} | Marca: {res.marca if res.marca else 'N/A'}</small></div>""", unsafe_allow_html=True)
+                        if st.button(f"📲 Pedir para {res.empresa}", key=f"z_{i}"):
+                            msg = urllib.parse.quote(f"Olá {res.vendedor}, gostaria de fechar o item *{item_busca}* por {formatar_para_br(res.preco)}.")
+                            st.markdown(f'<meta http-equiv="refresh" content="0;URL=https://wa.me/{res.whatsapp}?text={msg}">', unsafe_allow_html=True)
 
         with tab4:
-            st.subheader("📦 Gestão de Produtos")
-            with st.form("cad_novo"):
-                n_itens = st.text_area("Cole a lista (um por linha):", placeholder="ARROZ 5KG\nFEIJAO 1KG")
+            st.subheader("📈 Histórico")
+            h = conn.query("SELECT * FROM historico_precos ORDER BY data_compra DESC", ttl=0)
+            st.dataframe(h, use_container_width=True)
+
+        with tab5:
+            st.subheader("📦 Gestão")
+            with st.form("cad"):
+                n = st.text_area("Novos produtos (um por linha):")
                 if st.form_submit_button("➕ CADASTRAR"):
-                    if n_itens:
+                    if n:
                         with conn.session as s:
-                            for p in n_itens.split('\n'):
+                            for p in n.split('\n'):
                                 if p.strip(): s.execute(text("INSERT INTO produtos (nome, em_cotacao) SELECT :n, FALSE WHERE NOT EXISTS (SELECT 1 FROM produtos WHERE nome = :n)"), {"n": p.strip().upper()})
                             s.commit(); st.rerun()
             st.divider()
             df_g = conn.query("SELECT id, nome, em_cotacao FROM produtos ORDER BY nome", ttl=0)
-            if not df_g.empty:
-                with st.form("chk_gest"):
-                    c = {}; col1, col2 = st.columns(2)
-                    for i, r in enumerate(df_g.itertuples()):
-                        target = col1 if i < len(df_g)/2 else col2
-                        with target: c[r.id] = st.checkbox(r.nome, value=bool(r.em_cotacao), key=f"c_{r.id}")
-                    if st.form_submit_button("✅ ATUALIZAR LISTA ATIVA"):
-                        with conn.session as s:
-                            for pid, stt in c.items(): s.execute(text("UPDATE produtos SET em_cotacao = :s WHERE id = :i"), {"s": stt, "i": pid})
-                            s.commit(); st.rerun()
+            with st.form("chk"):
+                c = {}; c1, c2 = st.columns(2)
+                for i, r in enumerate(df_g.itertuples()):
+                    target = c1 if i < len(df_g)/2 else c2
+                    with target: c[r.id] = st.checkbox(r.nome, value=bool(r.em_cotacao), key=f"c_{r.id}")
+                if st.form_submit_button("✅ ATUALIZAR LISTA ATIVA"):
+                    with conn.session as s:
+                        for pid, stt in c.items(): s.execute(text("UPDATE produtos SET em_cotacao = :s WHERE id = :i"), {"s": stt, "i": pid})
+                    s.commit(); st.rerun()
 
-        with tab5:
+        with tab6:
             st.subheader("👀 Monitoramento")
-            q_m = """SELECT f.empresa, MAX(e.data_envio) as ultimo FROM fornecedores f 
-                     JOIN (SELECT fornecedor_id, data_cadastro as data_envio FROM cotacoes) e ON f.id = e.fornecedor_id 
-                     GROUP BY f.empresa ORDER BY ultimo DESC"""
-            try: st.table(conn.query(q_m, ttl=0))
-            except: st.info("Sem envios hoje.")
+            try:
+                df_m = conn.query("SELECT f.empresa, MAX(c.data_cadastro) as ultimo FROM fornecedores f JOIN cotacoes c ON f.id = c.fornecedor_id GROUP BY f.empresa", ttl=0)
+                st.table(df_m)
+            except: st.info("Sem dados.")
