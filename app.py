@@ -12,7 +12,7 @@ except ImportError:
     pass
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="BATTUDOO Elite v3.8", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="BATTUDOO Elite v3.9", page_icon="🛒", layout="wide")
 
 # CSS para UI/UX
 st.markdown("""
@@ -76,7 +76,8 @@ if modo == "📝 Cotação":
         </div>
     """, unsafe_allow_html=True)
     
-    df_v = conn.query("SELECT id, empresa, seller = vendedor FROM (SELECT id, empresa, vendedor FROM fornecedores) f ORDER BY empresa", ttl=0)
+    # SQL CORRIGIDO: Limpo, sem subquery confusa e usando o alias 'AS seller' do jeito certo
+    df_v = conn.query("SELECT id, empresa, vendedor AS seller FROM fornecedores ORDER BY empresa", ttl=0)
     lista_v = [f"{r.empresa} ({r.seller})" for r in df_v.itertuples()]
     v_sel = st.selectbox("Selecione sua empresa:", ["---", "🆕 NOVO CADASTRO"] + lista_v)
 
@@ -102,7 +103,6 @@ if modo == "📝 Cotação":
                     res[r.id] = formatar_moeda_input(p_in)
                     c2.write(f"**{formatar_para_br(res[r.id])}**")
                     
-                    # VALIDANDO QUALQUER VARIAÇÃO DE +BARATO, +BARATA, +barato, +barata
                     nome_lower = r.nome.lower()
                     exibir_marca = "+barato" in nome_lower or "+barata" in nome_lower
                     
@@ -169,8 +169,6 @@ else:
                 for forn in df_r["empresa"].unique():
                     id_f = int(df_r[df_r["empresa"] == forn]["forn_id"].iloc[0])
                     df_f = df_r[df_r["empresa"] == forn]
-                    
-                    # Buscar se esse fornecedor enviou alguma oferta extra ativa
                     df_ex = conn.query(f"SELECT produto, preco FROM ofertas_extras WHERE fornecedor_id = {id_f}", ttl=0)
                     
                     with st.expander(f"📦 FORNECEDOR: {forn}", expanded=True):
@@ -187,7 +185,6 @@ else:
                                 texto_item = f"• {qtd} {und} - {p_txt} {f'({obs})' if obs else ''} - {formatar_para_br(r['preco'])}"
                                 linhas.append(texto_item)
                         
-                        # INSERINDO AS OFERTAS EXTRAS NO PEDIDO SE EXISTIREM
                         if not df_ex.empty:
                             st.markdown("---")
                             st.markdown("**Ofertas Extras Enviadas pelo Fornecedor:**")
