@@ -76,8 +76,8 @@ if modo == "📝 Cotação":
     st.title("🛒 Portal de Cotação")
     st.markdown("""
         <div style="background-color: #fff4e5; padding: 20px; border-radius: 10px; border-left: 5px solid #ffa500; margin: 10px 0;">
-            <strong style="color: #d35400; font-size: 1.2em;">📢 DICA DE PREENCHIMENTO RÁPIDO:</strong><br>
-            <span style="color: #2c3e50; font-weight: 500;">Você não precisa apertar Enter em cada produto! Digite o preço e use a tecla <b>TAB</b> para ir direto para o próximo item. Ao final, basta clicar em Enviar.</span>
+            <strong style="color: #d35400; font-size: 1.2em;">📢 ATENÇÃO:</strong><br>
+            <span style="color: #2c3e50; font-weight: 500;">Houve uma mudança no nosso Banco de Dados. Cadastr-se abaixo se necessário.</span>
         </div>
     """, unsafe_allow_html=True)
     
