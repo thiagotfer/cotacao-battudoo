@@ -91,23 +91,30 @@ if modo == "📝 Cotação":
     elif v_sel != "---":
         f_id = int(df_v.iloc[lista_v.index(v_sel)]['id'])
 
-    if f_id:
+if f_id:
         df_p = conn.query("SELECT id, nome FROM produtos WHERE em_cotacao = TRUE ORDER BY nome", ttl=0)
         if not df_p.empty:
             with st.form("form_cot"):
                 res = {}
                 for r in df_p.itertuples():
+                    # Mudado aqui para c1, c2, c3
                     c1, c2, c3 = st.columns([3, 1, 2])
                     p_in = c1.text_input(r.nome, key=f"p_{r.id}")
                     res[r.id] = formatar_moeda_input(p_in)
                     c2.write(f"**{formatar_para_br(res[r.id])}**")
-                    res[f"m_{r.id}"] = col3.text_input("Marca", key=f"m_{r.id}") if "+b" in r.nome.lower() else ""
+                    
+                    # CORRIGIDO: Agora usa c3.text_input em vez de col3
+                    res[f"m_{r.id}"] = c3.text_input("Marca", key=f"m_{r.id}") if "+b" in r.nome.lower() else ""
+                    
                 if st.form_submit_button("🚀 ENVIAR COTAÇÃO"):
                     with conn.session as s:
                         for pid, pr in res.items():
                             if isinstance(pid, int) and pr > 0:
                                 s.execute(text("INSERT INTO cotacoes (produto_id, fornecedor_id, preco, marca) VALUES (:p, :f, :pr, :m)"), {"p": pid, "f": f_id, "pr": pr, "m": res.get(f"m_{pid}", "")})
-                        s.commit(); st.success("Enviado com sucesso!"); st.balloons()
+                        s.commit()
+                    st.success("Enviado com sucesso!")
+                    st.balloons()
+                    st.rerun()
 
 # ---------------------------------------------------------
 # MODO 2: ADMIN
