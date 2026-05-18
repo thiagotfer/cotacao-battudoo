@@ -12,7 +12,7 @@ except ImportError:
     pass
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="BATTUDOO Elite v3.7", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="BATTUDOO Elite v3.8", page_icon="🛒", layout="wide")
 
 # CSS para UI/UX
 st.markdown("""
@@ -76,8 +76,8 @@ if modo == "📝 Cotação":
         </div>
     """, unsafe_allow_html=True)
     
-    df_v = conn.query("SELECT id, empresa, vendedor FROM fornecedores ORDER BY empresa", ttl=0)
-    lista_v = [f"{r.empresa} ({r.vendedor})" for r in df_v.itertuples()]
+    df_v = conn.query("SELECT id, empresa, seller = vendedor FROM (SELECT id, empresa, vendedor FROM fornecedores) f ORDER BY empresa", ttl=0)
+    lista_v = [f"{r.empresa} ({r.seller})" for r in df_v.itertuples()]
     v_sel = st.selectbox("Selecione sua empresa:", ["---", "🆕 NOVO CADASTRO"] + lista_v)
 
     f_id = None
@@ -91,20 +91,22 @@ if modo == "📝 Cotação":
     elif v_sel != "---":
         f_id = int(df_v.iloc[lista_v.index(v_sel)]['id'])
 
-if f_id:
+    if f_id:
         df_p = conn.query("SELECT id, nome FROM produtos WHERE em_cotacao = TRUE ORDER BY nome", ttl=0)
         if not df_p.empty:
             with st.form("form_cot"):
                 res = {}
                 for r in df_p.itertuples():
-                    # Mudado aqui para c1, c2, c3
                     c1, c2, c3 = st.columns([3, 1, 2])
                     p_in = c1.text_input(r.nome, key=f"p_{r.id}")
                     res[r.id] = formatar_moeda_input(p_in)
                     c2.write(f"**{formatar_para_br(res[r.id])}**")
                     
-                    # CORRIGIDO: Agora usa c3.text_input em vez de col3
-                    res[f"m_{r.id}"] = c3.text_input("Marca", key=f"m_{r.id}") if "+b" in r.nome.lower() else ""
+                    # VALIDANDO QUALQUER VARIAÇÃO DE +BARATO, +BARATA, +barato, +barata
+                    nome_lower = r.nome.lower()
+                    exibir_marca = "+barato" in nome_lower or "+barata" in nome_lower
+                    
+                    res[f"m_{r.id}"] = c3.text_input("Marca", key=f"m_{r.id}") if exibir_marca else ""
                     
                 if st.form_submit_button("🚀 ENVIAR COTAÇÃO"):
                     with conn.session as s:
@@ -115,6 +117,37 @@ if f_id:
                     st.success("Enviado com sucesso!")
                     st.balloons()
                     st.rerun()
+
+        # --- SEÇÃO DE PROMOÇÃO EXTRA (FORA DA LISTA) ---
+        st.divider()
+        st.subheader("🔥 Ofertas Extras (Produtos fora da lista de cotação)")
+        if 'num_o' not in st.session_state: 
+            st.session_state.num_o = 1
+            
+        extras = []
+        for i in range(st.session_state.num_o):
+            cx1, cx2, cx3 = st.columns([3, 1, 1])
+            n_ex = cx1.text_input(f"Produto Extra {i+1}", key=f"ex_n_{i}")
+            p_ex = cx2.text_input(f"Preço Extra {i+1}", key=f"ex_p_{i}")
+            v_ex = formatar_moeda_input(p_ex)
+            cx3.write(f"\n\n**{formatar_para_br(v_ex)}**")
+            
+            if i == st.session_state.num_o - 1 and n_ex != "":
+                st.session_state.num_o += 1; st.rerun()
+            if n_ex and v_ex > 0: 
+                extras.append({"n": n_ex, "p": v_ex})
+        
+        if st.button("📢 ENVIAR MEUS EXTRAS"):
+            if extras:
+                with conn.session as s:
+                    for item in extras:
+                        s.execute(text("INSERT INTO ofertas_extras (fornecedor_id, produto, preco) VALUES (:f, :n, :p)"), {"f": f_id, "n": item['n'].upper(), "p": item['p']})
+                    s.commit()
+                st.session_state.num_o = 1
+                st.success("Extras enviados com sucesso!")
+                st.rerun()
+            else:
+                st.warning("Preencha ao menos um produto e um preço válidos para enviar.")
 
 # ---------------------------------------------------------
 # MODO 2: ADMIN
@@ -136,8 +169,13 @@ else:
                 for forn in df_r["empresa"].unique():
                     id_f = int(df_r[df_r["empresa"] == forn]["forn_id"].iloc[0])
                     df_f = df_r[df_r["empresa"] == forn]
+                    
+                    # Buscar se esse fornecedor enviou alguma oferta extra ativa
+                    df_ex = conn.query(f"SELECT produto, preco FROM ofertas_extras WHERE fornecedor_id = {id_f}", ttl=0)
+                    
                     with st.expander(f"📦 FORNECEDOR: {forn}", expanded=True):
                         linhas = []
+                        st.markdown("**Itens Ganhos:**")
                         for _, r in df_f.iterrows():
                             c1, c2, c3, c4, c5 = st.columns([2, 1, 0.7, 0.8, 1.5])
                             p_txt = f"{r['nome']} ({r['marca']})" if r['marca'] else r['nome']
@@ -148,6 +186,20 @@ else:
                             if qtd > 0:
                                 texto_item = f"• {qtd} {und} - {p_txt} {f'({obs})' if obs else ''} - {formatar_para_br(r['preco'])}"
                                 linhas.append(texto_item)
+                        
+                        # INSERINDO AS OFERTAS EXTRAS NO PEDIDO SE EXISTIREM
+                        if not df_ex.empty:
+                            st.markdown("---")
+                            st.markdown("**Ofertas Extras Enviadas pelo Fornecedor:**")
+                            for ex in df_ex.itertuples():
+                                c1, c2, c3, c4, c5 = st.columns([2, 1, 0.7, 0.8, 1.5])
+                                c1.write(f"*{ex.produto}*"); c2.write(formatar_para_br(ex.preco))
+                                qe = c3.number_input("Qtd", min_value=0, step=1, key=f"qe_{id_f}_{ex.produto}", label_visibility="collapsed")
+                                ue = c4.selectbox("Un", ["UN", "CX", "FD", "PCT"], key=f"ue_{id_f}_{ex.produto}", label_visibility="collapsed")
+                                oe = c5.text_input("Obs", key=f"oe_{id_f}_{ex.produto}", label_visibility="collapsed")
+                                if qe > 0:
+                                    texto_extra = f"• {qe} {ue} - {ex.produto} {f'({oe})' if oe else ''} - {formatar_para_br(ex.preco)} (EXTRA)"
+                                    linhas.append(texto_extra)
                         
                         st.divider()
                         col_pdf, col_zap = st.columns(2)
@@ -175,6 +227,16 @@ else:
                         if st.button(f"📲 Pedir para {res.empresa}", key=f"z_{i}"):
                             msg = urllib.parse.quote(f"Olá {res.vendedor}, gostaria de fechar o item *{item_busca}* por {formatar_para_br(res.preco)}.")
                             st.markdown(f'<meta http-equiv="refresh" content="0;URL=https://wa.me/{res.whatsapp}?text={msg}">', unsafe_allow_html=True)
+
+        with tab3:
+            st.subheader("🔥 Visão Geral de Ofertas Extras")
+            df_todas_ex = conn.query("""SELECT f.empresa, f.vendedor, o.produto, o.preco, f.whatsapp 
+                                        FROM ofertas_extras o JOIN fornecedores f ON o.fornecedor_id = f.id 
+                                        ORDER BY o.produto ASC""", ttl=0)
+            if not df_todas_ex.empty:
+                st.dataframe(df_todas_ex, use_container_width=True)
+            else:
+                st.info("Nenhuma oferta extra foi enviada pelos fornecedores ainda.")
 
         with tab4:
             st.subheader("📈 Histórico")
