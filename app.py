@@ -12,7 +12,7 @@ except ImportError:
     pass
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="BATTUDOO Elite v4.0", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="BATTUDOO Elite v4.1", page_icon="🛒", layout="wide")
 
 # CSS para UI/UX
 st.markdown("""
@@ -76,8 +76,8 @@ if modo == "📝 Cotação":
     st.title("🛒 Portal de Cotação")
     st.markdown("""
         <div style="background-color: #fff4e5; padding: 20px; border-radius: 10px; border-left: 5px solid #ffa500; margin: 10px 0;">
-            <strong style="color: #d35400; font-size: 1.2em;">📢 ATENÇÃO:</strong><br>
-            <span style="color: #2c3e50; font-weight: 500;">Houve uma mudança no Banco de Dados. Vendedores, por favor, recadastrem-se abaixo.</span>
+            <strong style="color: #d35400; font-size: 1.2em;">📢 DICA DE PREENCHIMENTO RÁPIDO:</strong><br>
+            <span style="color: #2c3e50; font-weight: 500;">Você não precisa apertar Enter em cada produto! Digite o preço e use a tecla <b>TAB</b> para ir direto para o próximo item. Ao final, basta clicar em Enviar.</span>
         </div>
     """, unsafe_allow_html=True)
     
@@ -91,7 +91,7 @@ if modo == "📝 Cotação":
         e, v, z = c1.text_input("Empresa"), c2.text_input("Nome"), c3.text_input("WhatsApp")
         if st.button("Cadastrar"):
             with conn.session as s:
-                s.execute(text("INSERT INTO cotacoes (produto_id, fornecedor_id, preco, marca) VALUES (:p, :f, :pr, :m) ON CONFLICT (produto_id, fornecedor_id) DO UPDATE SET preco = EXCLUDED.preco, marca = EXCLUDED.marca"), {"p": pid, "f": f_id, "pr": pr, "m": res.get(f"m_{pid}", "")})
+                res = s.execute(text("INSERT INTO fornecedores (empresa, vendedor, whatsapp) VALUES (:e, :v, :z) RETURNING id"), {"e": e.upper(), "v": v, "z": z})
                 f_id = res.fetchone()[0]; s.commit(); st.rerun()
     elif v_sel != "---":
         f_id = int(df_v.iloc[lista_v.index(v_sel)]['id'])
@@ -107,7 +107,7 @@ if modo == "📝 Cotação":
                     res[r.id] = formatar_moeda_input(p_in)
                     c2.write(f"**{formatar_para_br(res[r.id])}**")
                     
-                    # LÓGICA ULTRA ROBUSTA PARA OBRIGAR MARCA (Aceita com ou sem '+')
+                    # LÓGICA ULTRA ROBUSTA PARA OBRIGAR MARCA
                     nome_para_busca = r.nome.lower()
                     exibir_marca = "barato" in nome_para_busca or "barata" in nome_para_busca or "marca" in nome_para_busca
                     
@@ -116,11 +116,12 @@ if modo == "📝 Cotação":
                     else:
                         res[f"m_{r.id}"] = ""
                     
+                # BOTÃO COM COLO DA REGRA ON CONFLICT DO POSTGRES
                 if st.form_submit_button("🚀 ENVIAR COTAÇÃO"):
                     with conn.session as s:
                         for pid, pr in res.items():
                             if isinstance(pid, int) and pr > 0:
-                                s.execute(text("INSERT INTO cotacoes (produto_id, fornecedor_id, preco, marca) VALUES (:p, :f, :pr, :m)"), {"p": pid, "f": f_id, "pr": pr, "m": res.get(f"m_{pid}", "")})
+                                s.execute(text("INSERT INTO cotacoes (produto_id, fornecedor_id, preco, marca) VALUES (:p, :f, :pr, :m) ON CONFLICT (produto_id, fornecedor_id) DO UPDATE SET preco = EXCLUDED.preco, marca = EXCLUDED.marca"), {"p": pid, "f": f_id, "pr": pr, "m": res.get(f"m_{pid}", "")})
                         s.commit()
                     st.success("Enviado com sucesso!")
                     st.balloons()
@@ -192,22 +193,22 @@ else:
                             und = c4.selectbox("Un", ["UN", "CX", "DP", "PCT", "FD"], key=f"u_{id_f}_{r['nome']}", label_visibility="collapsed")
                             obs = c5.text_input("Obs", key=f"o_{id_f}_{r['nome']}", label_visibility="collapsed")
                             
-                            # Para a folha de PDF completa (caso queira imprimir sem Qtd para conferir)
                             linhas_pdf_conferência.append(f"• [  ] - {p_txt} - {formatar_para_br(r['preco'])}")
                             
                             if qtd > 0:
                                 texto_item = f"• {qtd} {und} - {p_txt} {f'({obs})' if obs else ''} - {formatar_para_br(r['preco'])}"
                                 linhas.append(texto_item)
                         
+                        # BLOCO DE EXTRAS INTEGRADO COM ENUMERATE (CHAVES ÚNICAS GARANTIDAS)
                         if not df_ex.empty:
                             st.markdown("---")
                             st.markdown("**Ofertas Extras Enviadas pelo Fornecedor:**")
-                            for ex in df_ex.itertuples():
+                            for idx, ex in enumerate(df_ex.itertuples()):
                                 c1, c2, c3, c4, c5 = st.columns([2, 1, 0.7, 0.8, 1.5])
                                 c1.write(f"*{ex.produto}*"); c2.write(formatar_para_br(ex.preco))
-                                qe = c3.number_input("Qtd", min_value=0, step=1, key=f"qe_{id_f}_{ex.produto}", label_visibility="collapsed")
-                                ue = c4.selectbox("Un", ["UN", "CX", "FD", "PCT"], key=f"ue_{id_f}_{ex.produto}", label_visibility="collapsed")
-                                oe = c5.text_input("Obs", key=f"oe_{id_f}_{ex.produto}", label_visibility="collapsed")
+                                qe = c3.number_input("Qtd", min_value=0, step=1, key=f"qe_{id_f}_{ex.produto}_{idx}", label_visibility="collapsed")
+                                ue = c4.selectbox("Un", ["UN", "CX", "FD", "PCT"], key=f"ue_{id_f}_{ex.produto}_{idx}", label_visibility="collapsed")
+                                oe = c5.text_input("Obs", key=f"oe_{id_f}_{ex.produto}_{idx}", label_visibility="collapsed")
                                 
                                 linhas_pdf_conferência.append(f"• [  ] - {ex.produto} (EXTRA) - {formatar_para_br(ex.preco)}")
                                 
@@ -218,10 +219,8 @@ else:
                         st.divider()
                         col_pdf, col_zap = st.columns(2)
                         
-                        # Definindo o corpo do zap e do PDF digitado
                         zap_msg = f"*PEDIDO BATTUDOO - {forn}*\n\n" + "\n".join(linhas)
                         
-                        # CORREÇÃO CRÍTICA: O botão de PDF agora sempre aparece se o fornecedor tiver itens ganhos!
                         with col_pdf:
                             lista_para_o_pdf = linhas if linhas else linhas_pdf_conferência
                             st.download_button(
