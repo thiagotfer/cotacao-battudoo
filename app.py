@@ -12,7 +12,7 @@ except ImportError:
     pass
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="BATTUDOO Elite v3.9", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="BATTUDOO Elite v4.0", page_icon="🛒", layout="wide")
 
 # CSS para UI/UX
 st.markdown("""
@@ -50,10 +50,15 @@ def gerar_pdf_final(empresa, lista_pedido):
     p.line(70, 700, 540, 700)
     y = 670
     p.setFont("Helvetica", 11)
-    for linha in lista_pedido:
-        p.drawString(70, y, linha)
-        y -= 20
-        if y < 50: p.showPage(); y = 750
+    
+    if lista_pedido:
+        for linha in lista_pedido:
+            p.drawString(70, y, linha)
+            y -= 20
+            if y < 50: p.showPage(); y = 750
+    else:
+        p.drawString(70, y, "Nenhum item com quantidade informada para este pedido.")
+        
     p.showPage(); p.save(); buffer.seek(0)
     return buffer
 
@@ -76,7 +81,6 @@ if modo == "📝 Cotação":
         </div>
     """, unsafe_allow_html=True)
     
-    # SQL CORRIGIDO: Limpo, sem subquery confusa e usando o alias 'AS seller' do jeito certo
     df_v = conn.query("SELECT id, empresa, vendedor AS seller FROM fornecedores ORDER BY empresa", ttl=0)
     lista_v = [f"{r.empresa} ({r.seller})" for r in df_v.itertuples()]
     v_sel = st.selectbox("Selecione sua empresa:", ["---", "🆕 NOVO CADASTRO"] + lista_v)
@@ -103,10 +107,14 @@ if modo == "📝 Cotação":
                     res[r.id] = formatar_moeda_input(p_in)
                     c2.write(f"**{formatar_para_br(res[r.id])}**")
                     
-                    nome_lower = r.nome.lower()
-                    exibir_marca = "+barato" in nome_lower or "+barata" in nome_lower
+                    # LÓGICA ULTRA ROBUSTA PARA OBRIGAR MARCA (Aceita com ou sem '+')
+                    nome_para_busca = r.nome.lower()
+                    exibir_marca = "barato" in nome_para_busca or "barata" in nome_para_busca or "marca" in nome_para_busca
                     
-                    res[f"m_{r.id}"] = c3.text_input("Marca", key=f"m_{r.id}") if exibir_marca else ""
+                    if exibir_marca:
+                        res[f"m_{r.id}"] = c3.text_input("⚠️ Digite a Marca deste item", key=f"m_{r.id}", placeholder="Ex: Nestlé / Renata")
+                    else:
+                        res[f"m_{r.id}"] = ""
                     
                 if st.form_submit_button("🚀 ENVIAR COTAÇÃO"):
                     with conn.session as s:
@@ -173,6 +181,8 @@ else:
                     
                     with st.expander(f"📦 FORNECEDOR: {forn}", expanded=True):
                         linhas = []
+                        linhas_pdf_conferência = []
+                        
                         st.markdown("**Itens Ganhos:**")
                         for _, r in df_f.iterrows():
                             c1, c2, c3, c4, c5 = st.columns([2, 1, 0.7, 0.8, 1.5])
@@ -181,6 +191,10 @@ else:
                             qtd = c3.number_input("Qtd", min_value=0, step=1, key=f"q_{id_f}_{r['nome']}", label_visibility="collapsed")
                             und = c4.selectbox("Un", ["UN", "CX", "DP", "PCT", "FD"], key=f"u_{id_f}_{r['nome']}", label_visibility="collapsed")
                             obs = c5.text_input("Obs", key=f"o_{id_f}_{r['nome']}", label_visibility="collapsed")
+                            
+                            # Para a folha de PDF completa (caso queira imprimir sem Qtd para conferir)
+                            linhas_pdf_conferência.append(f"• [  ] - {p_txt} - {formatar_para_br(r['preco'])}")
+                            
                             if qtd > 0:
                                 texto_item = f"• {qtd} {und} - {p_txt} {f'({obs})' if obs else ''} - {formatar_para_br(r['preco'])}"
                                 linhas.append(texto_item)
@@ -194,16 +208,31 @@ else:
                                 qe = c3.number_input("Qtd", min_value=0, step=1, key=f"qe_{id_f}_{ex.produto}", label_visibility="collapsed")
                                 ue = c4.selectbox("Un", ["UN", "CX", "FD", "PCT"], key=f"ue_{id_f}_{ex.produto}", label_visibility="collapsed")
                                 oe = c5.text_input("Obs", key=f"oe_{id_f}_{ex.produto}", label_visibility="collapsed")
+                                
+                                linhas_pdf_conferência.append(f"• [  ] - {ex.produto} (EXTRA) - {formatar_para_br(ex.preco)}")
+                                
                                 if qe > 0:
                                     texto_extra = f"• {qe} {ue} - {ex.produto} {f'({oe})' if oe else ''} - {formatar_para_br(ex.preco)} (EXTRA)"
                                     linhas.append(texto_extra)
                         
                         st.divider()
                         col_pdf, col_zap = st.columns(2)
+                        
+                        # Definindo o corpo do zap e do PDF digitado
                         zap_msg = f"*PEDIDO BATTUDOO - {forn}*\n\n" + "\n".join(linhas)
+                        
+                        # CORREÇÃO CRÍTICA: O botão de PDF agora sempre aparece se o fornecedor tiver itens ganhos!
                         with col_pdf:
-                            if linhas: st.download_button("📄 Gerar PDF", data=gerar_pdf_final(forn, linhas), file_name=f"pedido_{forn}.pdf", key=f"pdf_{id_f}")
-                        with col_zap: st.markdown(f"[📲 Zap](https://wa.me/?text={urllib.parse.quote(zap_msg)})")
+                            lista_para_o_pdf = linhas if linhas else linhas_pdf_conferência
+                            st.download_button(
+                                "📄 Gerar Espelho PDF", 
+                                data=gerar_pdf_final(forn, lista_para_o_pdf), 
+                                file_name=f"pedido_{forn}.pdf", 
+                                key=f"pdf_{id_f}"
+                            )
+                            
+                        with col_zap: 
+                            st.markdown(f"[📲 Zap](https://wa.me/?text={urllib.parse.quote(zap_msg)})")
                         st.code(zap_msg)
 
         with tab2:
