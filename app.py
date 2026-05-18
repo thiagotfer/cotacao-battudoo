@@ -91,7 +91,7 @@ if modo == "📝 Cotação":
         e, v, z = c1.text_input("Empresa"), c2.text_input("Nome"), c3.text_input("WhatsApp")
         if st.button("Cadastrar"):
             with conn.session as s:
-                res = s.execute(text("INSERT INTO fornecedores (empresa, vendedor, whatsapp) VALUES (:e, :v, :z) RETURNING id"), {"e": e.upper(), "v": v, "z": z})
+                s.execute(text("INSERT INTO cotacoes (produto_id, fornecedor_id, preco, marca) VALUES (:p, :f, :pr, :m) ON CONFLICT (produto_id, fornecedor_id) DO UPDATE SET preco = EXCLUDED.preco, marca = EXCLUDED.marca"), {"p": pid, "f": f_id, "pr": pr, "m": res.get(f"m_{pid}", "")})
                 f_id = res.fetchone()[0]; s.commit(); st.rerun()
     elif v_sel != "---":
         f_id = int(df_v.iloc[lista_v.index(v_sel)]['id'])
