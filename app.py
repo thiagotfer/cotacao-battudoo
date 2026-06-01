@@ -12,7 +12,7 @@ except ImportError:
     pass
 
 # 1. CONFIGURAÇÃO DA PÁGINA
-st.set_page_config(page_title="BATTUDOO Elite v4.1", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="BIGBERG 2 Elite v4.1", page_icon="🛒", layout="wide")
 
 # CSS para UI/UX
 st.markdown("""
@@ -43,7 +43,7 @@ def gerar_pdf_final(empresa, lista_pedido):
     buffer = BytesIO()
     p = canvas.Canvas(buffer, pagesize=letter)
     p.setFont("Helvetica-Bold", 16)
-    p.drawString(70, 750, "BATTUDOO - ESPELHO DE PEDIDO")
+    p.drawString(70, 750, "BIGBERG 2 (CPV VELHA) - ESPELHO DE PEDIDO")
     p.setFont("Helvetica", 12)
     p.drawString(70, 725, f"Fornecedor: {empresa}")
     p.drawString(70, 710, f"Data: {pd.Timestamp.now().strftime('%d/%m/%Y %H:%M')}")
@@ -64,7 +64,7 @@ def gerar_pdf_final(empresa, lista_pedido):
 
 # --- NAVEGAÇÃO ---
 with st.sidebar:
-    st.title("BATTUDOO Admin")
+    st.title("BIG BERG 2 Admin")
     modo = st.radio("Menu:", ["📝 Cotação", "📊 Painel Admin"], key="nav_main")
     if st.session_state.get('autenticado') and st.button("🔒 Sair"):
         st.session_state.autenticado = False; st.rerun()
@@ -219,7 +219,7 @@ else:
                         st.divider()
                         col_pdf, col_zap = st.columns(2)
                         
-                        zap_msg = f"*PEDIDO BATTUDOO - {forn}*\n\n" + "\n".join(linhas)
+                        zap_msg = f"*PEDIDO BIG BERG 2 (CPV VELHA) - {forn}*\n\n" + "\n".join(linhas)
                         
                         with col_pdf:
                             lista_para_o_pdf = linhas if linhas else linhas_pdf_conferência
