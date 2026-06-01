@@ -77,7 +77,7 @@ if modo == "📝 Cotação":
     st.markdown("""
         <div style="background-color: #fff4e5; padding: 20px; border-radius: 10px; border-left: 5px solid #ffa500; margin: 10px 0;">
             <strong style="color: #d35400; font-size: 1.2em;">📢 ATENÇÃO:</strong><br>
-            <span style="color: #2c3e50; font-weight: 500;">Houve uma mudança no nosso Banco de Dados. Cadastr-se abaixo se necessário.</span>
+            <span style="color: #2c3e50; font-weight: 500;">Houve uma mudança no nosso Banco de Dados. Cadastre-se abaixo se necessário.</span>
         </div>
     """, unsafe_allow_html=True)
     
