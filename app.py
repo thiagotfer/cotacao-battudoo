@@ -15,7 +15,7 @@ except ImportError:
 # ---------------------------------------------------------
 # 1. CONFIGURAÇÃO DA PÁGINA
 # ---------------------------------------------------------
-st.set_page_config(page_title="BIGBERG 2 Elite v4.2", page_icon="🛒", layout="wide")
+st.set_page_config(page_title="BIGBERG 2 Elite v4.3", page_icon="🛒", layout="wide")
 
 st.markdown(
     """
@@ -216,8 +216,93 @@ def render_botao_encerrar_cotacao(local_key):
             st.warning("Marque a confirmação antes de encerrar a cotação.")
         else:
             encerrar_cotacao_atual()
+            st.session_state.pedidos_manuais = {}
             st.success("Cotação atual encerrada e limpa com sucesso.")
             st.rerun()
+
+
+def get_pedidos_manuais():
+    """Itens adicionados pela aba Consultar Item.
+    Fica salvo durante a sessão do navegador e não mexe nas chaves dos widgets do Ranking,
+    evitando crash do Streamlit ao tentar alterar um campo já renderizado.
+    """
+    if "pedidos_manuais" not in st.session_state:
+        st.session_state.pedidos_manuais = {}
+    return st.session_state.pedidos_manuais
+
+
+def adicionar_item_pedido_manual(
+    fornecedor_id,
+    empresa,
+    produto_id,
+    produto,
+    preco,
+    marca,
+    quantidade,
+    unidade,
+    observacao,
+    cotacao_id=None,
+):
+    pedidos = get_pedidos_manuais()
+    chave_fornecedor = str(int(fornecedor_id))
+
+    item = {
+        "cotacao_id": int(cotacao_id) if cotacao_id is not None else None,
+        "fornecedor_id": int(fornecedor_id),
+        "empresa": str(empresa),
+        "produto_id": int(produto_id) if produto_id is not None else None,
+        "produto": str(produto),
+        "preco": float(preco),
+        "marca": str(marca or ""),
+        "quantidade": int(quantidade),
+        "unidade": str(unidade),
+        "observacao": str(observacao or ""),
+    }
+
+    if chave_fornecedor not in pedidos:
+        pedidos[chave_fornecedor] = []
+
+    # Se clicar de novo no mesmo item, atualiza em vez de duplicar.
+    atualizado = False
+    for idx, existente in enumerate(pedidos[chave_fornecedor]):
+        if cotacao_id is not None and existente.get("cotacao_id") == int(cotacao_id):
+            pedidos[chave_fornecedor][idx] = item
+            atualizado = True
+            break
+
+    if not atualizado:
+        pedidos[chave_fornecedor].append(item)
+
+    st.session_state.pedidos_manuais = pedidos
+    return atualizado
+
+
+def remover_item_pedido_manual(fornecedor_id, indice):
+    pedidos = get_pedidos_manuais()
+    chave_fornecedor = str(int(fornecedor_id))
+    if chave_fornecedor in pedidos and 0 <= indice < len(pedidos[chave_fornecedor]):
+        pedidos[chave_fornecedor].pop(indice)
+        if not pedidos[chave_fornecedor]:
+            pedidos.pop(chave_fornecedor, None)
+        st.session_state.pedidos_manuais = pedidos
+
+
+def limpar_pedido_manual_fornecedor(fornecedor_id):
+    pedidos = get_pedidos_manuais()
+    pedidos.pop(str(int(fornecedor_id)), None)
+    st.session_state.pedidos_manuais = pedidos
+
+
+def montar_texto_item_manual(item):
+    produto_txt = item["produto"]
+    if item.get("marca"):
+        produto_txt = f"{produto_txt} ({item['marca']})"
+
+    obs_txt = f" ({item['observacao']})" if item.get("observacao") else ""
+    return (
+        f"• {item['quantidade']} {item['unidade']} - "
+        f"{produto_txt}{obs_txt} - {formatar_para_br(item['preco'])}"
+    )
 
 
 # ---------------------------------------------------------
@@ -548,6 +633,32 @@ else:
                                     )
                                     linhas.append(texto_extra)
 
+                        # ITENS ADICIONADOS MANUALMENTE PELA ABA CONSULTAR ITEM
+                        pedidos_manuais = get_pedidos_manuais()
+                        itens_manuais_fornecedor = pedidos_manuais.get(str(id_f), [])
+
+                        if itens_manuais_fornecedor:
+                            st.markdown("---")
+                            st.markdown("**Itens adicionados manualmente pela aba Consultar Item:**")
+
+                            for idx_manual, item_manual in enumerate(list(itens_manuais_fornecedor)):
+                                cm1, cm2 = st.columns([5, 1])
+                                texto_manual = montar_texto_item_manual(item_manual)
+                                cm1.write(texto_manual)
+                                if cm2.button(
+                                    "Remover",
+                                    key=f"rem_manual_{id_f}_{idx_manual}_{item_manual.get('cotacao_id', 'semid')}",
+                                ):
+                                    remover_item_pedido_manual(id_f, idx_manual)
+                                    st.rerun()
+
+                                linhas.append(texto_manual)
+                                linhas_pdf_conferencia.append(texto_manual)
+
+                            if st.button("Limpar itens manuais deste fornecedor", key=f"limpar_manual_{id_f}"):
+                                limpar_pedido_manual_fornecedor(id_f)
+                                st.rerun()
+
                         st.divider()
                         col_pdf, col_zap = st.columns(2)
 
@@ -578,6 +689,9 @@ else:
         # -------------------------------------------------
         with tab2:
             st.subheader("🔍 Consultar Opções por Item")
+            st.caption(
+                "Aqui você consulta todos os preços de um produto e pode adicionar uma opção específica ao pedido do fornecedor."
+            )
 
             df_p_cota = conn.query(
                 """
@@ -601,11 +715,15 @@ else:
                 if item_busca != "---":
                     q_todos = """
                         SELECT
+                            c.id AS cotacao_id,
+                            c.produto_id,
+                            c.fornecedor_id,
                             f.empresa,
                             f.vendedor,
                             c.preco,
                             COALESCE(c.marca, '') AS marca,
-                            f.whatsapp
+                            f.whatsapp,
+                            p.nome AS produto
                         FROM cotacoes c
                         JOIN fornecedores f ON c.fornecedor_id = f.id
                         JOIN produtos p ON c.produto_id = p.id
@@ -614,6 +732,11 @@ else:
                         ORDER BY c.preco ASC, f.empresa ASC
                     """
                     res_c = conn.query(q_todos, params={"nome": item_busca}, ttl=0)
+
+                    if res_c.empty:
+                        st.info("Nenhum preço encontrado para este produto.")
+                    else:
+                        st.markdown("### Opções encontradas")
 
                     for i, res in enumerate(res_c.itertuples()):
                         cor = "green" if i == 0 else "#2c3e50"
@@ -627,14 +750,66 @@ else:
                             unsafe_allow_html=True,
                         )
 
-                        if st.button(f"📲 Pedir para {res.empresa}", key=f"z_{i}_{item_busca}"):
+                        col_qtd, col_un, col_obs, col_add, col_zap = st.columns([0.8, 1, 2, 2, 1])
+
+                        qtd_add = col_qtd.number_input(
+                            "Qtd",
+                            min_value=1,
+                            step=1,
+                            value=1,
+                            key=f"consulta_qtd_{int(res.cotacao_id)}",
+                        )
+                        un_add = col_un.selectbox(
+                            "Un",
+                            UNIDADES_PEDIDO,
+                            key=f"consulta_un_{int(res.cotacao_id)}",
+                        )
+                        obs_add = col_obs.text_input(
+                            "Obs",
+                            key=f"consulta_obs_{int(res.cotacao_id)}",
+                            placeholder="Opcional",
+                        )
+
+                        if col_add.button(
+                            f"➕ Adicionar em pedido de {res.empresa}",
+                            key=f"consulta_add_{int(res.cotacao_id)}",
+                        ):
+                            atualizado = adicionar_item_pedido_manual(
+                                fornecedor_id=int(res.fornecedor_id),
+                                empresa=res.empresa,
+                                produto_id=int(res.produto_id),
+                                produto=res.produto,
+                                preco=float(res.preco),
+                                marca=res.marca,
+                                quantidade=int(qtd_add),
+                                unidade=un_add,
+                                observacao=obs_add,
+                                cotacao_id=int(res.cotacao_id),
+                            )
+                            if atualizado:
+                                st.success(f"Item atualizado no pedido de {res.empresa}.")
+                            else:
+                                st.success(f"Item adicionado ao pedido de {res.empresa}.")
+
+                        if col_zap.button("📲 Zap", key=f"consulta_zap_{int(res.cotacao_id)}"):
                             msg = urllib.parse.quote(
                                 f"Olá {res.vendedor}, gostaria de fechar o item *{item_busca}* por {formatar_para_br(res.preco)}."
                             )
+                            whatsapp = "" if pd.isna(res.whatsapp) else str(res.whatsapp)
                             st.markdown(
-                                f'<meta http-equiv="refresh" content="0;URL=https://wa.me/{res.whatsapp}?text={msg}">',
+                                f'<meta http-equiv="refresh" content="0;URL=https://wa.me/{whatsapp}?text={msg}">',
                                 unsafe_allow_html=True,
                             )
+
+                        st.divider()
+
+                pedidos_manuais = get_pedidos_manuais()
+                total_itens_manuais = sum(len(v) for v in pedidos_manuais.values())
+                if total_itens_manuais > 0:
+                    st.info(
+                        f"Você tem {total_itens_manuais} item(ns) adicionado(s) manualmente. "
+                        "Abra a aba Ranking para gerar o espelho/PDF/WhatsApp com eles."
+                    )
 
         # -------------------------------------------------
         # TAB 3: EXTRAS
